@@ -3,8 +3,6 @@
 PhD student in Biostatistics & Modeling  
 Saw Swee Hock School of Public Health, National University of Singapore  
 
----
-
 ## Research Focus
 - Mathematical disease modeling
 - Bayesian calibration and uncertainty quantification
