@@ -22,7 +22,7 @@ Saw Swee Hock School of Public Health, National University of Singapore
 ![HPC](https://img.shields.io/badge/HPC-OpenMP-informational)
 ![Obsidian](https://img.shields.io/badge/Obsidian-483699?logo=obsidian&logoColor=white)
 
-# Analytics
+## Analytics
 <!-- ![Top Languages](https://github-readme-stats-pi-one-0d2mhgehrc.vercel.app/api?username=Mister-He&show_icons=true&hide_title=true&theme=github_dark&cache_seconds=86400) -->
 
 ![GitHub Stats](https://github-readme-stats-pi-one-0d2mhgehrc.vercel.app/api/top-langs/?username=Mister-He&layout=compact&theme=github_dark&cache_seconds=86400)
