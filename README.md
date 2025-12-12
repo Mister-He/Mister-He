@@ -18,5 +18,5 @@ Saw Swee Hock School of Public Health, National University of Singapore
 ![HPC](https://img.shields.io/badge/HPC-OpenMP-informational)
 
 ## GitHub Analytics
-![GitHub Stats](https://github-readme-stats-pi-one-0d2mhgehrc.vercel.app/api?username=Mister-He&show_icons=true&hide_title=true&cache_seconds=86400)
+![GitHub Stats](https://github-readme-stats-pi-one-0d2mhgehrc.vercel.app/api/top-langs/?username=Mister-He&layout=compact&cache_seconds=86400))
 ![Top Languages](https://github-readme-stats-pi-one-0d2mhgehrc.vercel.app/api?username=Mister-He&layout=compact&cache_seconds=86400)
