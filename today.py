@@ -44,10 +44,29 @@ def simple_request(func_name, query, variables):
     """
     Returns a request, or raises an Exception if the response does not succeed.
     """
-    request = requests.post('https://api.github.com/graphql', json={'query': query, 'variables':variables}, headers=HEADERS)
-    if request.status_code == 200:
-        return request
-    raise Exception(func_name, ' has failed with a', request.status_code, request.text, QUERY_COUNT)
+    for attempt in range(5):
+        try:
+            request = requests.post(
+                'https://api.github.com/graphql',
+                json={'query': query, 'variables': variables},
+                headers=HEADERS, timeout=60,
+            )
+        except (requests.Timeout, requests.ConnectionError):
+            if attempt == 4:
+                raise
+        else:
+            if request.status_code == 200:
+                payload = request.json()
+                errors = payload.get('errors')
+                if not errors and payload.get('data') is not None:
+                    return request
+                # HTTP 200 may still contain GraphQL errors and incomplete data.
+                raise RuntimeError(f'{func_name}: GraphQL errors: {errors or "missing data"}')
+            if request.status_code not in {429, 502, 503, 504} or attempt == 4:
+                raise RuntimeError(f'{func_name}: HTTP {request.status_code}: {request.text}')
+        delay = 2 ** attempt
+        print(f'{func_name}: retrying request in {delay}s ({attempt + 1}/4)')
+        time.sleep(delay)
 
 
 def graph_commits(start_date, end_date):
@@ -72,21 +91,36 @@ def graph_commits(start_date, end_date):
 
 def graph_repos_stars(count_type, owner_affiliation, cursor=None, add_loc=0, del_loc=0):
     """
-    Uses GitHub's GraphQL v4 API to return my total repository, star, or lines of code count.
+    Count repositories or sum stars over every page of owned repositories.
     """
-    query_count('graph_repos_stars')
+    if count_type not in {'repos', 'stars'}:
+        raise ValueError(f'Unknown repository count type: {count_type}')
+    if count_type == 'repos':
+        query_count('graph_repos_stars')
+        query = '''
+        query ($owner_affiliation: [RepositoryAffiliation], $login: String!) {
+            user(login: $login) {
+                repositories(ownerAffiliations: $owner_affiliation) {
+                    totalCount
+                }
+            }
+        }'''
+        request = simple_request(graph_repos_stars.__name__, query, {
+            'owner_affiliation': owner_affiliation, 'login': USER_NAME,
+        })
+        user = request.json()['data'].get('user')
+        if not user or user.get('repositories') is None:
+            raise RuntimeError('Repository count unavailable: missing user/repositories')
+        return user['repositories']['totalCount']
     query = '''
     query ($owner_affiliation: [RepositoryAffiliation], $login: String!, $cursor: String) {
         user(login: $login) {
-            repositories(first: 100, after: $cursor, ownerAffiliations: $owner_affiliation) {
-                totalCount
+            repositories(first: 25, after: $cursor, ownerAffiliations: $owner_affiliation) {
                 edges {
                     node {
                         ... on Repository {
                             nameWithOwner
-                            stargazers {
-                                totalCount
-                            }
+                            stargazerCount
                         }
                     }
                 }
@@ -98,12 +132,37 @@ def graph_repos_stars(count_type, owner_affiliation, cursor=None, add_loc=0, del
         }
     }'''
     variables = {'owner_affiliation': owner_affiliation, 'login': USER_NAME, 'cursor': cursor}
-    request = simple_request(graph_repos_stars.__name__, query, variables)
-    if request.status_code == 200:
-        if count_type == 'repos':
-            return request.json()['data']['user']['repositories']['totalCount']
-        elif count_type == 'stars':
-            return stars_counter(request.json()['data']['user']['repositories']['edges'])
+    total_stars = 0
+    seen_cursors = {cursor}
+    while True:
+        for attempt in range(3):
+            query_count('graph_repos_stars')
+            request = simple_request(graph_repos_stars.__name__, query, variables)
+            user = request.json()['data'].get('user')
+            repositories = user.get('repositories') if user else None
+            try:
+                if repositories is None:
+                    raise ValueError('missing user/repositories')
+                page_stars = stars_counter(repositories.get('edges'))
+                page_info = repositories.get('pageInfo')
+                if not isinstance(page_info, dict) or not isinstance(page_info.get('hasNextPage'), bool):
+                    raise ValueError('missing pagination metadata')
+            except ValueError as error:
+                if attempt == 2:
+                    raise RuntimeError(f'Incomplete Stars response after 3 attempts: {error}') from error
+                print(f'Incomplete Stars response ({error}); retrying the same page')
+                time.sleep(2 ** attempt)
+            else:
+                break
+        # Only accumulate fully validated pages; retries must not double-count.
+        total_stars += page_stars
+        if not page_info['hasNextPage']:
+            return total_stars
+        cursor = page_info.get('endCursor')
+        if not cursor or cursor in seen_cursors:
+            raise RuntimeError('Stars pagination did not advance')
+        seen_cursors.add(cursor)
+        variables['cursor'] = cursor
 
 
 def recursive_loc(owner, repo_name, data, cache_comment, addition_total=0, deletion_total=0, my_commits=0, cursor=None):
@@ -306,7 +365,16 @@ def stars_counter(data):
     Count total stars in repositories owned by me
     """
     total_stars = 0
-    for node in data: total_stars += node['node']['stargazers']['totalCount']
+    if not isinstance(data, list):
+        raise ValueError('missing repository edges')
+    for index, edge in enumerate(data):
+        node = edge.get('node') if isinstance(edge, dict) else None
+        if not isinstance(node, dict):
+            raise ValueError(f'repository edge {index} has no node')
+        count = node.get('stargazerCount')
+        if type(count) is not int or count < 0:
+            raise ValueError(f'invalid star count for {node.get("nameWithOwner", index)}')
+        total_stars += count
     return total_stars
 
 
