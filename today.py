@@ -108,22 +108,19 @@ def graph_repos_stars(count_type, owner_affiliation, cursor=None, add_loc=0, del
 
 def recursive_loc(owner, repo_name, data, cache_comment, addition_total=0, deletion_total=0, my_commits=0, cursor=None):
     """
-    Uses GitHub's GraphQL v4 API and cursor pagination to fetch 100 commits from a repository at a time
+    Uses GitHub's GraphQL v4 API and cursor pagination to fetch a small page of commits at a time.
+    The page is intentionally small because GitHub may return a 502 for expensive history queries.
     """
     query_count('recursive_loc')
     query = '''
-    query ($repo_name: String!, $owner: String!, $cursor: String) {
+    query ($repo_name: String!, $owner: String!, $cursor: String, $page_size: Int!) {
         repository(name: $repo_name, owner: $owner) {
             defaultBranchRef {
                 target {
                     ... on Commit {
-                        history(first: 100, after: $cursor) {
-                            totalCount
+                        history(first: $page_size, after: $cursor) {
                             edges {
                                 node {
-                                    ... on Commit {
-                                        committedDate
-                                    }
                                     author {
                                         user {
                                             id
@@ -143,10 +140,12 @@ def recursive_loc(owner, repo_name, data, cache_comment, addition_total=0, delet
             }
         }
     }'''
-    variables = {'repo_name': repo_name, 'owner': owner, 'cursor': cursor}
+    base_page_size = 25
+    variables = {'repo_name': repo_name, 'owner': owner, 'cursor': cursor, 'page_size': base_page_size}
     request = None
     transient_statuses = {429, 502, 503, 504}
     for attempt in range(5):
+        variables['page_size'] = max(1, base_page_size // (2 ** attempt))
         request = requests.post(
             'https://api.github.com/graphql',
             json={'query': query, 'variables': variables},
@@ -157,7 +156,7 @@ def recursive_loc(owner, repo_name, data, cache_comment, addition_total=0, delet
             break
         retry_after = request.headers.get('Retry-After')
         delay = int(retry_after) if retry_after and retry_after.isdigit() else 2 ** attempt
-        print(f'GitHub returned {request.status_code}; retrying in {delay}s ({attempt + 1}/4)')
+        print(f'GitHub returned {request.status_code} for {owner}/{repo_name}; retrying in {delay}s with {variables["page_size"]} commits ({attempt + 1}/4)')
         time.sleep(min(delay, 60))
     if request.status_code == 200:
         if request.json()['data']['repository']['defaultBranchRef'] != None: # Only count commits if repo isn't empty
@@ -166,12 +165,12 @@ def recursive_loc(owner, repo_name, data, cache_comment, addition_total=0, delet
     force_close_file(data, cache_comment) # saves what is currently in the file before this program crashes
     if request.status_code == 403:
         raise Exception('Too many requests in a short amount of time!\nYou\'ve hit the non-documented anti-abuse limit!')
-    raise Exception('recursive_loc() has failed with a', request.status_code, request.text, QUERY_COUNT)
+    raise Exception(f'recursive_loc() failed for {owner}/{repo_name} with {request.status_code}', request.text, QUERY_COUNT)
 
 
 def loc_counter_one_repo(owner, repo_name, data, cache_comment, history, addition_total, deletion_total, my_commits):
     """
-    Recursively call recursive_loc (since GraphQL can only search 100 commits at a time) 
+    Recursively call recursive_loc (since GraphQL paginates commit history) 
     only adds the LOC value of commits authored by me
     """
     for node in history['edges']:
