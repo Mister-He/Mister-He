@@ -11,7 +11,7 @@ import hashlib
 # Repository permissions: read:Commit statuses, read:Contents, read:Issues, read:Metadata, read:Pull Requests
 # Issues and pull requests permissions not needed at the moment, but may be used in the future
 HEADERS = {'authorization': 'token '+ os.environ['ACCESS_TOKEN']}
-USER_NAME = os.environ['USER_NAME'] # 'Andrew6rant'
+USER_NAME = os.environ['USER_NAME'] # e.g. 'Mister-He'
 QUERY_COUNT = {'user_getter': 0, 'follower_getter': 0, 'graph_repos_stars': 0, 'recursive_loc': 0, 'graph_commits': 0, 'loc_query': 0}
 
 
@@ -276,25 +276,6 @@ def flush_cache(edges, filename, comment_size):
             f.write(hashlib.sha256(node['node']['nameWithOwner'].encode('utf-8')).hexdigest() + ' 0 0 0 0\n')
 
 
-def add_archive():
-    """
-    Several repositories I have contributed to have since been deleted.
-    This function adds them using their last known data
-    """
-    with open('cache/repository_archive.txt', 'r') as f:
-        data = f.readlines()
-    old_data = data
-    data = data[7:len(data)-3] # remove the comment block    
-    added_loc, deleted_loc, added_commits = 0, 0, 0
-    contributed_repos = len(data)
-    for line in data:
-        repo_hash, total_commits, my_commits, *loc = line.split()
-        added_loc += int(loc[0])
-        deleted_loc += int(loc[1])
-        if (my_commits.isdigit()): added_commits += int(my_commits)
-    added_commits += int(old_data[-1].split()[4][:-1])
-    return [added_loc, deleted_loc, added_loc - deleted_loc, added_commits, contributed_repos]
-
 def force_close_file(data, cache_comment):
     """
     Forces the file to close, preserving whatever data was written to it
@@ -341,6 +322,17 @@ def justify_format(root, element_id, new_text, length=0):
         new_text = f"{'{:,}'.format(new_text)}"
     new_text = str(new_text)
     find_and_replace(root, element_id, new_text)
+    if element_id == 'age_data':
+        # The value is right-aligned at x=970, so fill the complete row with dots.
+        just_len = max(1, 60 - (2 + len('Uptime') + 1) - len(new_text) - 2)
+        dot_string = ' ' + ('.' * just_len) + ' '
+        find_and_replace(root, f"{element_id}_dots", dot_string)
+        return
+    if element_id == 'loc_data':
+        # Keep the LOC value immediately before the shared separator column.
+        just_len = max(1, 35 - (2 + len('Lines of Code on GitHub') + 1) - len(new_text))
+        find_and_replace(root, f"{element_id}_dots", '.' * just_len)
+        return
     just_len = max(0, length - len(new_text))
     if just_len <= 2:
         dot_map = {0: '', 1: ' ', 2: '. '}
@@ -439,15 +431,15 @@ def formatter(query_type, difference, funct_return=False, whitespace=0):
 
 if __name__ == '__main__':
     """
-    Andrew Grant (Andrew6rant), 2022-2025
+    Yichen He (Mister-He)
     """
     print('Calculation times:')
     # define global variable for owner ID and calculate user's creation date
-    # e.g {'id': 'MDQ6VXNlcjU3MzMxMTM0'} and 2019-11-03T21:15:07Z for username 'Andrew6rant'
+    # e.g. {'id': '...'} and 'YYYY-MM-DDTHH:MM:SSZ' for the configured username
     user_data, user_time = perf_counter(user_getter, USER_NAME)
     OWNER_ID, acc_date = user_data
     formatter('account data', user_time)
-    age_data, age_time = perf_counter(daily_readme, datetime.datetime(2002, 7, 5))
+    age_data, age_time = perf_counter(daily_readme, datetime.datetime(2000, 2, 10))
     formatter('age calculation', age_time)
     total_loc, loc_time = perf_counter(loc_query, ['OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER'], 7)
     formatter('LOC (cached)', loc_time) if total_loc[-1] else formatter('LOC (no cache)', loc_time)
@@ -456,14 +448,6 @@ if __name__ == '__main__':
     repo_data, repo_time = perf_counter(graph_repos_stars, 'repos', ['OWNER'])
     contrib_data, contrib_time = perf_counter(graph_repos_stars, 'repos', ['OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER'])
     follower_data, follower_time = perf_counter(follower_getter, USER_NAME)
-
-    # several repositories that I've contributed to have since been deleted.
-    if OWNER_ID == {'id': 'MDQ6VXNlcjU3MzMxMTM0'}: # only calculate for user Andrew6rant
-        archived_data = add_archive()
-        for index in range(len(total_loc)-1):
-            total_loc[index] += archived_data[index]
-        contrib_data += archived_data[-1]
-        commit_data += int(archived_data[-2])
 
     for index in range(len(total_loc)-1): total_loc[index] = '{:,}'.format(total_loc[index]) # format added, deleted, and total LOC
 

@@ -5,6 +5,9 @@ on:
       - main
   schedule:
     - cron: "0 4 * * *"
+
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -34,7 +37,7 @@ jobs:
         run: |-
           git add .
           git diff
-          git config --global user.email "github-actions-bot@andrew6rant.github.io"
-          git config --global user.name "Andrew6rant/GitHub-Actions-Bot"
+          git config --global user.email "e0732876@u.nus.edu"
+          git config --global user.name "Mister He"
           git commit -m "Updated README" -a || echo "No changes to commit"
-          git push
+          git push origin HEAD:main
