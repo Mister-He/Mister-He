@@ -1,6 +1,5 @@
-<a href="https://github.com/Mister-He/Mister-He">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Mister-He/Mister-He/main/dark_mode.svg">
-    <img alt="Yichen He's GitHub Profile README" src="https://raw.githubusercontent.com/Mister-He/Mister-He/main/light_mode.svg">
-  </picture>
-</a>
+I am a PhD candidate in Biostatistics Modelling at the National University of Singapore. I currently work on biostatistics modelling and AI.
+- OS: Windows 11, Linux, macOS
+- Editor: Neovim (LazyVim), VS Code
+- Programming: R, Python, C++, Matlab, Julia
+- Spoken: Chinese, English, Italian
